@@ -1,155 +1,85 @@
 package com.github.sbt.jni
 package plugins
 
-import build._
-import sbt._
-import sbt.Keys._
-import sys.process._
+import bleep.internal.FileUtils
+import bleep.logging.Logger
+import bleep.{cli, PathOps, ProjectPaths}
+import com.github.sbt.jni.build._
 
-/**
- * Wraps a native build system in sbt tasks.
- */
-object JniNative extends AutoPlugin {
+import java.nio.file.{Files, Path}
 
-  object autoImport {
+/** Wraps a native build system in sbt tasks.
+  */
+class JniNative(
+    val logger: Logger,
+    projectPaths: ProjectPaths,
+    val nativeCompileSourceDirectory: Path,
+    // The build tool to be used when building a native library.
+    val nativeBuildTool: BuildTool,
+    val libName: String
+) {
+  nativeBuildTool.ensureHasBuildFile(nativeCompileSourceDirectory, logger)
 
-    // Main task, inspect this first
-    val nativeCompile = taskKey[File](
-      "Builds a native library by calling the native build tool."
-    )
+  // Builds a native library by calling the native build tool.
+  def nativeCompile(): Path = {
+    val tool = nativeBuildTool
+    val toolInstance = nativeBuildToolInstance
+    val targetDir = nativeCompileTarget / "bin"
+    Files.createDirectories(targetDir)
 
-    val nativePlatform = settingKey[String](
-      "Platform (architecture-kernel) of the system this build is running on."
-    )
-
-    val nativeBuildTool = taskKey[BuildTool](
-      "The build tool to be used when building a native library."
-    )
-
-    val nativeInit = inputKey[Seq[File]](
-      "Initialize a native build script from a template."
-    )
+    logger.info(s"Building library with native build tool ${tool.name}")
+    val lib = toolInstance.library(targetDir)
+    logger.info(s"Library built in $lib")
+    lib
 
   }
-  import autoImport._
 
-  val nativeBuildToolInstance = taskKey[BuildTool#Instance]("Get an instance of the current native build tool.")
-
-  lazy val settings: Seq[Setting[_]] = Seq(
-    // the value retruned must match that of `com.github.sbt.jni.PlatformMacros#current()` of project `macros`
-    nativePlatform := {
-      try {
-        val lines = Process("uname -sm").lineStream
-        if (lines.length == 0) {
-          sys.error("Error occured trying to run `uname`")
-        }
-        // uname -sm returns "<kernel> <hardware name>"
-        val parts = lines.head.split(" ")
-        if (parts.length != 2) {
-          sys.error("'uname -sm' returned unexpected string: " + lines.head)
-        } else {
-          val arch = parts(1).toLowerCase.replaceAll("\\s", "")
-          val kernel = parts(0).toLowerCase.replaceAll("\\s", "")
-          arch + "-" + kernel
-        }
-      } catch {
-        case _: Exception =>
-          sLog.value.error("Error trying to determine platform.")
-          sLog.value.warn("Cannot determine platform! It will be set to 'unknown'.")
-          "unknown-unknown"
+  // Platform (architecture-kernel) of the system this build is running on.
+  // the value returned must match that of `com.github.sbt.jni.PlatformMacros#current()` of project `macros`
+  lazy val nativePlatform: String =
+    try {
+      val lines = cli("check platform", FileUtils.TempDir, List("uname", "-sm"), cli.CliLogger(logger)).stdout
+      if (lines.isEmpty) {
+        sys.error("Error occurred trying to run `uname`")
       }
-    },
-    nativeCompile / sourceDirectory := sourceDirectory.value / "native",
-    nativeCompile / target := target.value / "native" / nativePlatform.value,
-    nativeBuildTool := {
-      val tools = BuildTool.buildTools.values.toList
-
-      val src = (nativeCompile / sourceDirectory).value
-
-      val tool = if (src.exists && src.isDirectory) {
-        tools.find(t => t.detect(src))
+      // uname -sm returns "<kernel> <hardware name>"
+      val parts = lines.head.split(" ")
+      if (parts.length != 2) {
+        sys.error("'uname -sm' returned unexpected string: " + lines.head)
       } else {
-        None
+        val arch = parts(1).toLowerCase.replaceAll("\\s", "")
+        val kernel = parts(0).toLowerCase.replaceAll("\\s", "")
+        arch + "-" + kernel
       }
-      tool.getOrElse(
-        sys.error(
-          "No supported native build tool detected. " +
-            s"Check that the setting 'nativeCompile / sourceDirectory' (currently set to $src) " +
-            "points to a directory containing a supported build script. Supported build tools are: " +
-            tools.map(_.name).mkString(",")
-        )
-      )
-
-    },
-    nativeBuildToolInstance := {
-      val tool = nativeBuildTool.value
-      val srcDir = (nativeCompile / sourceDirectory).value
-      val buildDir = (nativeCompile / target).value / "build"
-      IO.createDirectory(buildDir)
-      tool.getInstance(
-        baseDirectory = srcDir,
-        buildDirectory = buildDir,
-        logger = streams.value.log
-      )
-    },
-    nativeCompile / clean := {
-      val log = streams.value.log
-
-      log.debug("Cleaning native build")
-      try {
-        val toolInstance = nativeBuildToolInstance.value
-        toolInstance.clean()
-      } catch {
-        case ex: Exception =>
-          log.debug(s"Native cleaning failed: $ex")
-      }
-
-    },
-    nativeCompile := {
-      val tool = nativeBuildTool.value
-      val toolInstance = nativeBuildToolInstance.value
-      val targetDir = (nativeCompile / target).value / "bin"
-      val log = streams.value.log
-
-      IO.createDirectory(targetDir)
-
-      log.info(s"Building library with native build tool ${tool.name}")
-      val lib = toolInstance.library(targetDir)
-      log.success(s"Library built in ${lib.getAbsolutePath}")
-      lib
-    },
-
-    // also clean native sources
-    clean := {
-      clean.dependsOn(nativeCompile / clean).value
-    },
-    nativeInit := {
-      import complete.DefaultParsers._
-
-      val log = streams.value.log
-
-      def getTool(toolName: String): BuildTool = BuildTool.buildTools.getOrElse(
-        toolName.toLowerCase,
-        sys.error("Unsupported build tool: " + toolName)
-      )
-
-      val args = spaceDelimited("<tool> [<libname>]").parsed.toList
-
-      val (tool: BuildTool, lib: String) = args match {
-        case Nil                  => sys.error("Invalid arguments.")
-        case tool :: Nil          => (getTool(tool), name.value)
-        case tool :: lib :: other => (getTool(tool), lib)
-      }
-
-      log.info(s"Initializing native build with ${tool.name} configuration")
-      val files = tool.initTemplate((nativeCompile / sourceDirectory).value, lib)
-      files.foreach { file =>
-        log.info("Wrote to " + file.getAbsolutePath)
-      }
-      files
+    } catch {
+      case _: Exception =>
+        logger.error("Error trying to determine platform.")
+        logger.warn("Cannot determine platform! It will be set to 'unknown'.")
+        "unknown-unknown"
     }
-  )
 
-  override lazy val projectSettings = settings
+  lazy val nativeCompileTarget = projectPaths.targetDir / "native" / nativePlatform
 
+  // Get an instance of the current native build tool.
+  lazy val nativeBuildToolInstance: BuildTool.Instance = {
+    val buildDir = nativeCompileTarget / "build"
+    Files.createDirectories(buildDir)
+
+    nativeBuildTool.getInstance(
+      baseDirectory = nativeCompileSourceDirectory,
+      buildDirectory = buildDir,
+      logger = logger
+    )
+  }
+
+  def nativeCompileClean() = {
+    logger.debug("Cleaning native build")
+    try {
+      val toolInstance = nativeBuildToolInstance
+      toolInstance.clean()
+    } catch {
+      case ex: Exception =>
+        logger.debug(s"Native cleaning failed: $ex")
+    }
+  }
 }

@@ -1,88 +1,74 @@
 package com.github.sbt.jni
 package plugins
 
+import bleep.logging.Logger
+import bleep.{PathOps, ProjectPaths, fixedClasspath}
+import bloop.config.Config
+import com.github.sbt.jni.util.BytecodeUtil
+
+import java.io.File
 import java.net.URI
-import java.nio.file.Paths
-
-import collection.JavaConverters._
-import util.BytecodeUtil
-
-import sbt._
-import sbt.Keys._
-import xsbti.compile.CompileAnalysis
+import java.nio.file.{Path, Paths}
+import scala.collection.JavaConverters._
 
 /**
  * Adds `javah` header-generation functionality to projects.
  */
-object JniJavah extends AutoPlugin {
+class JniJavah(logger: Logger, projectPaths: ProjectPaths, bloopProject: Config.Project) {
+  lazy val targetDir: Path = projectPaths.targetDir
+  val javahTarget = targetDir / "native" / "include"
 
-  override def requires = plugins.JvmPlugin
-  override def trigger = allRequirements
+  // Finds fully qualified names of classes containing native declarations.
+  def javahClasses(): Set[String] = {
+    import xsbti.compile._
 
-  object autoImport {
+    val compiled: CompileAnalysis =
+      FileAnalysisStore.getDefault(projectPaths.incrementalAnalysis.toFile).get().get().getAnalysis
 
-    val javahClasses = taskKey[Set[String]](
-      "Finds fully qualified names of classes containing native declarations."
-    )
-
-    val javah = taskKey[File](
-      "Generate JNI headers. Returns the directory containing generated headers."
-    )
-
-  }
-  import autoImport._
-
-  lazy val mainSettings: Seq[Setting[_]] = Seq(
-    javah / javahClasses := {
-      import xsbti.compile._
-      val compiled: CompileAnalysis = (Compile / compile).value
-      val classFiles: Set[File] = compiled
-        .readStamps()
-        .getAllProductStamps()
-        .asScala
-        .keySet
-        .map { vf =>
-          (vf.names() match {
-            case Array(prefix, first, more @ _*) if prefix.startsWith("${") =>
-              Paths.get(first, more: _*)
-            case _ =>
-              Paths.get(URI.create("file:///" + vf.id().stripPrefix("/")))
-          }).toFile()
-        }
-        .toSet
-      val nativeClasses = classFiles.flatMap { file =>
-        BytecodeUtil.nativeClasses(file)
+    val classFiles: Set[File] = compiled
+      .readStamps()
+      .getAllProductStamps
+      .asScala
+      .keySet
+      .map { vf =>
+        (vf.names() match {
+          case Array(prefix, first, more@_*) if prefix.startsWith("${") =>
+            Paths.get(first, more: _*)
+          case _ =>
+            Paths.get(URI.create("file:///" + vf.id().stripPrefix("/")))
+        }).toFile
       }
-      nativeClasses
-    },
-    javah / target := target.value / "native" / "include",
-    javah := {
-      val out = (javah / target).value
+      .toSet
+    val nativeClasses = classFiles.flatMap { file =>
+      BytecodeUtil.nativeClasses(file)
+    }
+    nativeClasses
+  }
+
+
+  // Generate JNI headers. Returns the directory containing generated headers.
+  def javah(): Path = {
+      val out = javahTarget
 
       val task = new com.github.sbt.jni.javah.JavahTask
 
-      val log = streams.value.log
+      val log = logger
 
-      val classes = (javah / javahClasses).value
+      val classes = javahClasses()
       if (classes.nonEmpty) {
-        log.info("Headers will be generated to " + out.getAbsolutePath)
+        log.info("Headers will be generated to " + out)
       }
-      classes.foreach(task.addClass(_))
+      classes.foreach(task.addClass)
 
       // fullClasspath can't be used here since it also generates resources. In
       // a project combining JniJavah and JniPackage, we would have a chicken-and-egg
       // problem.
-      val jcp: Seq[File] = (Compile / dependencyClasspath).value.map(_.data) :+ (Compile / classDirectory).value
-      jcp.foreach(cp => task.addClassPath(cp.toPath))
+      fixedClasspath(bloopProject).foreach(task.addClassPath)
 
       task.addRuntimeSearchPath()
-      task.setOutputDir(Paths.get(out.getAbsolutePath))
+      task.setOutputDir(out)
       task.run()
 
       out
     }
-  )
-
-  override lazy val projectSettings = mainSettings
-
 }

@@ -1,108 +1,94 @@
 package com.github.sbt.jni
 package plugins
 
-import util.CollectionOps
-import sbt._
-import sbt.Keys._
-import sbt.io.Path._
-import java.io.File
+import bleep.{PathOps, RelPath}
 
-/**
- * Packages libraries built with JniNative.
- */
-object JniPackage extends AutoPlugin {
+import java.nio.file.{Files, Path}
+import scala.jdk.CollectionConverters._
 
-  // JvmPlugin is required or else it will override resource generators when first included
-  override def requires = JniNative && plugins.JvmPlugin
-  override def trigger = allRequirements
+/** Packages libraries built with JniNative.
+  */
+class JniPackage(
+    val baseDirectory: Path,
+    val jniNative: JniNative
+) {
 
-  object autoImport {
+  // Unmanaged directories containing native libraries. The libraries must be regular files contained in a subdirectory corresponding to a platform. For example `<unmanagedNativeDirectory>/x86_64-linux/libfoo.so` is an unmanaged library for machines having the x86_64 architecture and running the Linux kernel.
+  lazy val unmanagedNativeDirectories: Seq[Path] =
+    Seq(baseDirectory / "lib_native")
 
-    val enableNativeCompilation = settingKey[Boolean](
-      "Determines if native compilation is enabled. If not enabled, only pre-compiled libraries in " +
-        "`unmanagedNativeDirectories` will be packaged."
-    )
+  // Unmanaged directories containing native libraries. The libraries must be regular files contained in a subdirectory corresponding to a platform. For example `<unmanagedNativeDirectory>/x86_64-linux/libfoo.so` is an unmanaged library for machines having the x86_64 architecture and running the Linux kernel.
+  lazy val unmanagedPlatformDependentNativeDirectories: Seq[(String, Path)] =
+    Seq(jniNative.nativePlatform -> baseDirectory / "lib_native")
 
-    val unmanagedNativeDirectories = settingKey[Seq[File]](
-      "Unmanaged directories containing native libraries. The libraries must be regular files " +
-        "contained in a subdirectory corresponding to a platform. For example " +
-        "`<unmanagedNativeDirectory>/x86_64-linux/libfoo.so` is an unmanaged library for machines having " +
-        "the x86_64 architecture and running the Linux kernel."
-    )
-
-    val unmanagedPlatformDependentNativeDirectories = settingKey[Seq[(String, File)]](
-      "Unmanaged directories containing native libraries. The libraries must be regular files " +
-        "contained in a subdirectory corresponding to a platform. For example " +
-        "`<unmanagedNativeDirectory>/x86_64-linux/libfoo.so` is an unmanaged library for machines having " +
-        "the x86_64 architecture and running the Linux kernel."
-    )
-
-    val unmanagedNativeLibraries = taskKey[Seq[(File, String)]](
-      "Reads `unmanagedNativeDirectories` and maps libraries to their locations on the classpath " +
-        "(i.e. their path in a fat jar)."
-    )
-
-    val managedNativeLibraries = taskKey[Seq[(File, String)]](
-      "Maps locally built, platform-dependant libraries to their locations on the classpath."
-    )
-
-    val nativeLibraries = taskKey[Seq[(File, String)]](
-      "All native libraries, managed and unmanaged."
-    )
-
-  }
-  import autoImport._
-  import JniNative.autoImport._
-  import CollectionOps._
-
-  lazy val settings: Seq[Setting[_]] = Seq(
-    enableNativeCompilation := true,
-    unmanagedNativeDirectories := Seq(baseDirectory.value / "lib_native"),
-    unmanagedPlatformDependentNativeDirectories := Seq(nativePlatform.value -> baseDirectory.value / "lib_native"),
-    unmanagedNativeLibraries := {
-      val mappings: Seq[(File, String)] = unmanagedNativeDirectories.value.flatMap { dir =>
-        val files: Seq[File] = (dir ** "*").get.filter(_.isFile)
-        files.pair(rebase(dir, "/native"))
-      }
-      val mappingsPlatform: Seq[(File, String)] = unmanagedPlatformDependentNativeDirectories.value.flatMap { case (platform, dir) =>
-        val files: Seq[File] = (dir ** "*").get.filter(_.isFile)
-        files.pair(rebase(dir, s"/native/$platform"))
-      }
-      mappings ++ mappingsPlatform
-    },
-    managedNativeLibraries := Def
-      .taskDyn[Seq[(File, String)]] {
-        val enableManaged = enableNativeCompilation.value
-        if (enableManaged) Def.task {
-          val library: File = nativeCompile.value
-          val platform = nativePlatform.value
-
-          Seq(library -> s"/native/$platform/${library.name}")
-        }
-        else
-          Def.task {
-            Seq.empty
+  // Reads `unmanagedNativeDirectories` and maps libraries to their locations on the classpath (i.e. their path in a fat jar).
+  val unmanagedNativeLibraries: Seq[(Path, RelPath)] = {
+    val mappings: Seq[(Path, RelPath)] =
+      unmanagedNativeDirectories.flatMap { dir =>
+        Files
+          .walk(dir)
+          .filter(Files.isRegularFile(_))
+          .iterator()
+          .asScala
+          .map { p =>
+            val relative0 = RelPath.relativeTo(dir, p)
+            val relative1 = relative0.copy(segments = "native" :: relative0.segments)
+            (p, relative1)
           }
       }
-      .value,
-    nativeLibraries := (unmanagedNativeLibraries.value ++ managedNativeLibraries.value).distinctBy(_._2),
-    resourceGenerators += Def.task {
-      val libraries: Seq[(File, String)] = nativeLibraries.value
-      val resources: Seq[File] = for ((file, path) <- libraries) yield {
 
-        // native library as a managed resource file
-        val resource = resourceManaged.value / path
-
-        // copy native library to a managed resource, so that it is always available
-        // on the classpath, even when not packaged as a jar
-        IO.copyFile(file, resource)
-        resource
+    val mappingsPlatform: Seq[(Path, RelPath)] =
+      unmanagedPlatformDependentNativeDirectories.flatMap { case (platform, dir) =>
+        Files
+          .walk(dir)
+          .filter(Files.isRegularFile(_))
+          .iterator
+          .asScala
+          .map { p =>
+            val relative0 = RelPath.relativeTo(dir, p)
+            val relative1 = relative0.copy(segments = "native" :: platform :: relative0.segments)
+            (p, relative1)
+          }
       }
-      resources
-    }.taskValue
-  )
+    mappings ++ mappingsPlatform
+  }
 
-  override lazy val projectSettings = inConfig(Compile)(settings) ++ inConfig(Test)(settings) ++
-    Seq(crossPaths := false) // don't add scala version to native jars
+  // Maps locally built, platform-dependant libraries to their locations on the classpath.
+  val managedNativeLibraries: Seq[(Path, RelPath)] = {
+    val library: Path = jniNative.nativeCompile()
+    val relPath = new RelPath(List("native", jniNative.nativePlatform, jniNative.libName))
+    Seq(library -> relPath)
+  }
+
+  // All native libraries, managed and unmanaged.
+  val nativeLibraries: Seq[(Path, RelPath)] =
+    distinctBy(unmanagedNativeLibraries ++ managedNativeLibraries)(_._2)
+
+  def copyTo(resourceManaged: Path): Seq[Path] =
+    nativeLibraries.map { case (file, relPath) =>
+      // native library as a managed resource file
+      val resource = resourceManaged / relPath
+
+      // copy native library to a managed resource, so that it is always available
+      // on the classpath, even when not packaged as a jar
+      Files.write(resource, Files.readAllBytes(file))
+      resource
+    }
+
+  // compat between 2.12 and 2.13
+  def distinctBy[A, B](seq: Seq[A])(f: A => B): Seq[A] = {
+    val builder = Seq.newBuilder[A]
+    val i = seq.iterator
+    var set = Set[B]()
+    while (i.hasNext) {
+      val o = i.next()
+      val b = f(o)
+      if (!set(b)) {
+        set += b
+        builder += o
+      }
+    }
+    builder.result()
+  }
 
 }

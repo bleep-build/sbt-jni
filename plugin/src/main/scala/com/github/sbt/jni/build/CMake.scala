@@ -1,29 +1,87 @@
 package com.github.sbt.jni
 package build
 
-import sbt._
-import sys.process._
+import bleep.internal.FileUtils
+import bleep.{cli, PathOps}
+import bleep.logging.Logger
 
-object CMake extends BuildTool with ConfigureMakeInstall {
+import java.nio.file.{Files, Path}
+import scala.jdk.CollectionConverters._
+
+object CMake extends BuildTool {
 
   override val name = "CMake"
 
-  override def detect(baseDirectory: File) = baseDirectory.list().contains("CMakeLists.txt")
+  val template =
+    """################################################################
+      |# A minimal CMake file that is compatible with sbt-jni         #
+      |#                                                              #
+      |# All settings required by sbt-jni have been marked so, please #
+      |# add/modify/remove settings to build your specific library.   #
+      |################################################################
+      |
+      |cmake_minimum_required(VERSION 3.12)
+      |
+      |option(SBT "Set if invoked from sbt-jni" OFF)
+      |
+      |# Define project and related variables
+      |# (required by sbt-jni) please use semantic versioning
+      |#
+      |project ({{project}})
+      |set(PROJECT_VERSION_MAJOR 0)
+      |set(PROJECT_VERSION_MINOR 0)
+      |set(PROJECT_VERSION_PATCH 0)
+      |
+      |# Setup JNI
+      |find_package(JNI REQUIRED)
+      |if (JNI_FOUND)
+      |    message (STATUS "JNI include directories: ${JNI_INCLUDE_DIRS}")
+      |endif()
+      |
+      |# Include directories
+      |include_directories(.)
+      |include_directories(include)
+      |include_directories(${JNI_INCLUDE_DIRS})
+      |
+      |# Sources
+      |file(GLOB LIB_SRC
+      |  "*.c"
+      |  "*.cc"
+      |  "*.cpp"
+      |)
+      |
+      |# Setup installation targets
+      |# (required by sbt-jni) major version should always be appended to library name
+      |#
+      |set (LIB_NAME ${PROJECT_NAME}${PROJECT_VERSION_MAJOR})
+      |add_library(${LIB_NAME} SHARED ${LIB_SRC})
+      |install(TARGETS ${LIB_NAME} LIBRARY DESTINATION .)
+      |""".stripMargin
 
-  override protected def templateMappings = Seq(
-    "/com/github/sbt/jni/templates/CMakeLists.txt" -> "CMakeLists.txt"
-  )
+  override def ensureHasBuildFile(sourceDirectory: Path, logger: Logger) = {
+    val buildScript = sourceDirectory / "CMakeLists.txt"
+    if (FileUtils.exists(buildScript)) ()
+    else {
+      logger.withContext(buildScript).info(s"Initialized empty build script for $name")
+      Files.writeString(buildScript, template)
+    }
+  }
 
-  override def getInstance(baseDir: File, buildDir: File, logger: Logger) = new Instance {
+  override def getInstance(baseDir: Path, buildDir: Path, logger: Logger): BuildTool.Instance =
+    new Instance(baseDir, buildDir, logger)
 
-    override def log = logger
-    override def baseDirectory = baseDir
-    override def buildDirectory = buildDir
+  class Instance(baseDir: Path, buildDir: Path, logger: Logger) extends BuildTool.Instance {
 
-    def cmakeProcess(args: String*): ProcessBuilder = Process("cmake" +: args, buildDirectory)
+    private val cliLogger: cli.CliLogger = cli.CliLogger(logger)
+
+    def cmakeProcess(args: List[String]): cli.WrittenLines =
+      cli("cmake", baseDir, "cmake" :: args, cliLogger)
+
+    def cmakeProcess(args: String*): cli.WrittenLines =
+      cmakeProcess(args.toList)
 
     lazy val cmakeVersion =
-      cmakeProcess("--version").lineStream.head
+      cmakeProcess("--version").stdout.head
         .split("\\s+")
         .last
         .split("\\.") match {
@@ -33,35 +91,73 @@ object CMake extends BuildTool with ConfigureMakeInstall {
         case _ => -1
       }
 
+    def parallelJobs: Int = java.lang.Runtime.getRuntime.availableProcessors()
+
     def parallelOptions: Seq[String] =
       if (cmakeVersion >= 312) Seq("--parallel", parallelJobs.toString())
       else Seq.empty
 
-    override def configure(target: File) = cmakeProcess(
-      // disable producing versioned library files, not needed for fat jars
-      s"-DCMAKE_INSTALL_PREFIX:PATH=${target.getAbsolutePath}",
-      "-DCMAKE_BUILD_TYPE=Release",
-      "-DSBT:BOOLEAN=true",
-      cmakeVersion.toString,
-      baseDirectory.getAbsolutePath
-    )
-
     override def clean(): Unit = cmakeProcess(
       "--build",
-      buildDirectory.getAbsolutePath,
+      buildDir.toString,
       "--target",
       "clean"
-    ).run(log)
-
-    override def make(): ProcessBuilder = cmakeProcess(
-      Seq("--build", buildDirectory.getAbsolutePath) ++ parallelOptions: _*
     )
 
-    override def install(): ProcessBuilder =
+    def configure(target: Path): Unit = cmakeProcess(
+      List(
+        // disable producing versioned library files, not needed for fat jars
+        s"-DCMAKE_INSTALL_PREFIX:PATH=$target",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DSBT:BOOLEAN=true",
+        cmakeVersion.toString,
+        baseDir.toString
+      )
+    )
+
+    def make(): Unit = cmakeProcess(
+      Seq("--build", buildDir.toString) ++ parallelOptions: _*
+    )
+
+    def install(): Unit =
       // https://cmake.org/cmake/help/v3.15/release/3.15.html#id6
       // Beginning with version 3.15, CMake introduced the install switch
-      if (cmakeVersion >= 315) cmakeProcess("--install", buildDirectory.getAbsolutePath)
-      else Process("make install", buildDirectory)
-  }
+      if (cmakeVersion >= 315) cmakeProcess("--install", buildDir.toString)
+      else cli("make install", buildDir, List("make", "install"), cliLogger)
 
+    def library(targetDirectory: Path): Path = {
+      configure(targetDirectory)
+      make()
+      install()
+
+      val products: List[Path] =
+        Files
+          .walk(targetDirectory)
+          .filter(Files.isRegularFile(_))
+          .filter { p =>
+            val fileName = p.getFileName.toString
+            fileName.endsWith(".so") || fileName.endsWith(".dylib")
+          }
+          .iterator
+          .asScala
+          .toList
+
+      // only one produced library is expected
+      products match {
+        case Nil =>
+          sys.error(
+            s"No files were created during compilation, " +
+              s"something went wrong with the ${name} configuration."
+          )
+        case head :: Nil =>
+          head
+        case head :: _ =>
+          logger.warn(
+            "More than one file was created during compilation, " +
+              s"only the first one ($head) will be used."
+          )
+          head
+      }
+    }
+  }
 }

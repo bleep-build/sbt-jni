@@ -1,47 +1,72 @@
 package com.github.sbt.jni.build
 
-import sbt._
+import bleep.internal.FileUtils
+import bleep.{cli, PathOps}
+import bleep.logging.Logger
 
-import java.io.File
-import scala.sys.process._
+import java.nio.file.{Files, Path}
+import scala.jdk.CollectionConverters._
 
 class Cargo(protected val release: Boolean = true) extends BuildTool {
 
   def name: String = "Cargo"
 
-  def detect(baseDirectory: File): Boolean =
-    baseDirectory.list().contains("Cargo.toml")
+  def ensureHasBuildFile(sourceDirectory: Path, logger: Logger): Unit = {
+    val buildScript = sourceDirectory / "Cargo.toml"
+    if (!FileUtils.exists(buildScript)) {
+      sys.error(s"Cargo build tool expected $buildScript to exist")
+    }
+  }
 
-  protected def templateMappings: List[(String, String)] = List(
-    "/com/github/sbt/jni/templates/Cargo.toml" -> "Cargo.toml"
-  )
+  val template =
+    """[package]
+      |name = "{{project}}"
+      |version = "0.1.0"
+      |authors = ["John Doe <john.doe@gmail.com>"]
+      |edition = "2018"
+      |
+      |[dependencies]
+      |jni = "0.19"
+      |
+      |[lib]
+      |crate_type = ["cdylib"]
+      |""".stripMargin
 
-  def getInstance(baseDirectory: File, buildDirectory: File, logger: sbt.Logger): Instance =
+  def getInstance(baseDirectory: Path, buildDirectory: Path, logger: Logger): Instance =
     new Instance(baseDirectory, logger)
 
-  class Instance(protected val baseDirectory: File, protected val logger: sbt.Logger) extends super.Instance {
-    // IntelliJ friendly logger, IntelliJ doesn't start tests if a line is printed as "error", which Cargo does for regular output
-    protected val log: ProcessLogger = new ProcessLogger {
-      def out(s: => String): Unit = logger.info(s)
-      def err(s: => String): Unit = logger.warn(s)
-      def buffer[T](f: => T): T = f
-    }
+  class Instance(protected val baseDirectory: Path, protected val logger: Logger) extends BuildTool.Instance {
+    val cliLogger = cli.CliLogger(logger)
 
     def clean(): Unit =
-      Process("cargo clean", baseDirectory) ! log
+      cli("cargo clean", baseDirectory, List("cargo", "clean"), cliLogger)
 
-    def library(targetDirectory: File): File = {
-      val releaseFlag = if (release) "--release " else ""
-      val ev =
-        Process(
-          s"cargo build $releaseFlag--target-dir ${targetDirectory.getAbsolutePath}",
-          baseDirectory
-        ) ! log
-      if (ev != 0) sys.error(s"Building native library failed. Exit code: $ev")
+    def library(targetDirectory: Path): Path = {
+      cli(
+        "cargo build",
+        baseDirectory,
+        List[Option[String]](
+          Some("cargo"),
+          Some("build"),
+          if (release) Some("--release") else None,
+          Some("--target-dir"),
+          Some(targetDirectory.toString)
+        ).flatten,
+        cliLogger
+      )
 
       val subdir = if (release) "release" else "debug"
-      val products: List[File] =
-        (targetDirectory / subdir * ("*.so" | "*.dylib")).get.filter(_.isFile).toList
+      val products: List[Path] =
+        Files
+          .walk(targetDirectory.resolve(subdir))
+          .filter(Files.isRegularFile(_))
+          .filter { p =>
+            val fileName = p.getFileName.toString
+            fileName.endsWith(".so") || fileName.endsWith(".dylib")
+          }
+          .iterator()
+          .asScala
+          .toList
 
       // only one produced library is expected
       products match {
@@ -55,23 +80,10 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
         case head :: _ =>
           logger.warn(
             "More than one file was created during compilation, " +
-              s"only the first one (${head.getAbsolutePath}) will be used."
+              s"only the first one ($head) will be used."
           )
           head
       }
     }
   }
-}
-
-object Cargo {
-
-  /**
-   * If `release` is `true`, `cargo build` will run with the `--release` flag.
-   */
-  def make(release: Boolean = true): BuildTool = new Cargo(release)
-
-  /**
-   * Cargo build tool, with the `--release` flag.
-   */
-  lazy val release: BuildTool = make()
 }
