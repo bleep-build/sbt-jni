@@ -2,7 +2,7 @@ package bleep.plugin.jni
 
 import bleep.internal.FileUtils
 import bleep.logging.Logger
-import bleep.{cli, PathOps}
+import bleep.{cli, PathOps, RelPath}
 
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
@@ -80,12 +80,13 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
           )
         case head :: Nil =>
           head
-        case head :: _ =>
-          logger.warn(
-            "More than one file was created during compilation, " +
-              s"only the first one ($head) will be used."
-          )
-          head
+        case more @ (picked :: _) =>
+          val foundBinaries = more.map(path => RelPath.relativeTo(targetDirectory, path).asString)
+          logger
+            .withContext(foundBinaries)
+            .withContext(picked)
+            .warn(s"More than one built library was found under $targetDirectory. Only the first one will be used.")
+          picked
       }
     }
   }
