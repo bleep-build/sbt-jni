@@ -1,10 +1,8 @@
-package com.github.sbt.jni
-package plugins
+package bleep.plugin.jni
 
 import bleep.internal.FileUtils
 import bleep.logging.Logger
-import bleep.{cli, PathOps, ProjectPaths}
-import com.github.sbt.jni.build._
+import bleep.{PathOps, ProjectPaths, cli}
 
 import java.nio.file.{Files, Path}
 
@@ -16,7 +14,8 @@ class JniNative(
     val nativeCompileSourceDirectory: Path,
     // The build tool to be used when building a native library.
     val nativeBuildTool: BuildTool,
-    val libName: String
+    val libName: String,
+    val env: List[(String, String)]
 ) {
   nativeBuildTool.ensureHasBuildFile(nativeCompileSourceDirectory, logger, libName)
 
@@ -68,7 +67,8 @@ class JniNative(
     nativeBuildTool.getInstance(
       baseDirectory = nativeCompileSourceDirectory,
       buildDirectory = buildDir,
-      logger = logger
+      logger,
+      env
     )
   }
 

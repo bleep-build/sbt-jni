@@ -1,10 +1,9 @@
-package com.github.sbt.jni
-package util
+package bleep.plugin.jni
+
+import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Opcodes}
 
 import java.io.{Closeable, File, FileInputStream}
 import scala.collection.mutable.HashSet
-
-import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Opcodes}
 
 object BytecodeUtil {
 

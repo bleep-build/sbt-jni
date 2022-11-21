@@ -1,5 +1,4 @@
-package com.github.sbt.jni
-package plugins
+package bleep.plugin.jni
 
 import bleep.{PathOps, RelPath}
 

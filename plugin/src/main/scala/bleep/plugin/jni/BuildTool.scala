@@ -1,5 +1,4 @@
-package com.github.sbt.jni
-package build
+package bleep.plugin.jni
 
 import bleep.logging.Logger
 
@@ -15,7 +14,7 @@ trait BuildTool {
 
   /** Get an instance (build configuration) of this tool, in the specified directory.
     */
-  def getInstance(baseDirectory: Path, buildDirectory: Path, logger: Logger): BuildTool.Instance
+  def getInstance(baseDirectory: Path, buildDirectory: Path, logger: Logger, env: List[(String, String)]): BuildTool.Instance
 }
 
 object BuildTool {

@@ -1,9 +1,8 @@
-package com.github.sbt.jni
-package build
+package bleep.plugin.jni
 
 import bleep.internal.FileUtils
-import bleep.{cli, PathOps}
 import bleep.logging.Logger
+import bleep.{PathOps, cli}
 
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
@@ -67,15 +66,15 @@ object CMake extends BuildTool {
     }
   }
 
-  override def getInstance(baseDir: Path, buildDir: Path, logger: Logger): BuildTool.Instance =
-    new Instance(baseDir, buildDir, logger)
+  override def getInstance(baseDir: Path, buildDir: Path, logger: Logger, env: List[(String, String)]): BuildTool.Instance =
+    new Instance(baseDir, buildDir, logger, env)
 
-  class Instance(baseDir: Path, buildDir: Path, logger: Logger) extends BuildTool.Instance {
+  class Instance(baseDir: Path, buildDir: Path, logger: Logger, env: List[(String, String)]) extends BuildTool.Instance {
 
     private val cliLogger: cli.CliLogger = cli.CliLogger(logger)
 
     def cmakeProcess(args: List[String]): cli.WrittenLines =
-      cli("cmake", baseDir, "cmake" :: args, cliLogger)
+      cli("cmake", baseDir, "cmake" :: args, cliLogger, env = env)
 
     def cmakeProcess(args: String*): cli.WrittenLines =
       cmakeProcess(args.toList)
@@ -123,7 +122,7 @@ object CMake extends BuildTool {
       // https://cmake.org/cmake/help/v3.15/release/3.15.html#id6
       // Beginning with version 3.15, CMake introduced the install switch
       if (cmakeVersion >= 315) cmakeProcess("--install", buildDir.toString)
-      else cli("make install", buildDir, List("make", "install"), cliLogger)
+      else cli("make install", buildDir, List("make", "install"), cliLogger, env = env)
 
     def library(targetDirectory: Path): Path = {
       configure(targetDirectory)

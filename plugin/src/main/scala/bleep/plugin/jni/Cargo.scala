@@ -1,8 +1,8 @@
-package com.github.sbt.jni.build
+package bleep.plugin.jni
 
 import bleep.internal.FileUtils
-import bleep.{cli, PathOps}
 import bleep.logging.Logger
+import bleep.{cli, PathOps}
 
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
@@ -13,10 +13,10 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
 
   def ensureHasBuildFile(sourceDirectory: Path, logger: Logger, libName: String): Unit = {
     val buildScript = sourceDirectory / "Cargo.toml"
-    if (FileUtils.exists(buildScript)) () else {
+    if (FileUtils.exists(buildScript)) ()
+    else {
       logger.withContext(buildScript).info(s"Initialized empty build script for $name")
       Files.writeString(buildScript, template(libName))
-
     }
   }
 
@@ -34,14 +34,14 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
       |crate_type = ["cdylib"]
       |""".stripMargin
 
-  def getInstance(baseDirectory: Path, buildDirectory: Path, logger: Logger): Instance =
-    new Instance(baseDirectory, logger)
+  override def getInstance(baseDirectory: Path, buildDirectory: Path, logger: Logger, env: List[(String, String)]): Instance =
+    new Instance(baseDirectory, logger, env)
 
-  class Instance(protected val baseDirectory: Path, protected val logger: Logger) extends BuildTool.Instance {
+  class Instance(protected val baseDirectory: Path, protected val logger: Logger, env: List[(String, String)]) extends BuildTool.Instance {
     val cliLogger = cli.CliLogger(logger)
 
     def clean(): Unit =
-      cli("cargo clean", baseDirectory, List("cargo", "clean"), cliLogger)
+      cli("cargo clean", baseDirectory, List("cargo", "clean"), cliLogger, env = env)
 
     def library(targetDirectory: Path): Path = {
       cli(
@@ -54,7 +54,8 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
           Some("--target-dir"),
           Some(targetDirectory.toString)
         ).flatten,
-        cliLogger
+        cliLogger,
+        env = env
       )
 
       val subdir = if (release) "release" else "debug"

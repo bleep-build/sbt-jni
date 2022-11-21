@@ -1,10 +1,8 @@
-package com.github.sbt.jni
-package plugins
+package bleep.plugin.jni
 
 import bleep.logging.Logger
 import bleep.{PathOps, ProjectPaths, fixedClasspath}
 import bloop.config.Config
-import com.github.sbt.jni.util.BytecodeUtil
 
 import java.io.File
 import java.net.URI
