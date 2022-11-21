@@ -11,7 +11,7 @@ trait BuildTool {
     */
   def name: String
 
-  def ensureHasBuildFile(sourceDirectory: Path, logger: Logger): Unit
+  def ensureHasBuildFile(sourceDirectory: Path, logger: Logger, libName: String): Unit
 
   /** Get an instance (build configuration) of this tool, in the specified directory.
     */

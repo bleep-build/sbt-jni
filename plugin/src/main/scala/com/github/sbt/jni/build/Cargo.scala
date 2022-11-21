@@ -11,16 +11,18 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
 
   def name: String = "Cargo"
 
-  def ensureHasBuildFile(sourceDirectory: Path, logger: Logger): Unit = {
+  def ensureHasBuildFile(sourceDirectory: Path, logger: Logger, libName: String): Unit = {
     val buildScript = sourceDirectory / "Cargo.toml"
-    if (!FileUtils.exists(buildScript)) {
-      sys.error(s"Cargo build tool expected $buildScript to exist")
+    if (FileUtils.exists(buildScript)) () else {
+      logger.withContext(buildScript).info(s"Initialized empty build script for $name")
+      Files.writeString(buildScript, template(libName))
+
     }
   }
 
-  val template =
-    """[package]
-      |name = "{{project}}"
+  def template(libName: String) =
+    s"""[package]
+      |name = "${libName}"
       |version = "0.1.0"
       |authors = ["John Doe <john.doe@gmail.com>"]
       |edition = "2018"

@@ -18,7 +18,7 @@ class JniNative(
     val nativeBuildTool: BuildTool,
     val libName: String
 ) {
-  nativeBuildTool.ensureHasBuildFile(nativeCompileSourceDirectory, logger)
+  nativeBuildTool.ensureHasBuildFile(nativeCompileSourceDirectory, logger, libName)
 
   // Builds a native library by calling the native build tool.
   def nativeCompile(): Path = {
