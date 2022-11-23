@@ -64,7 +64,7 @@ class JniPackage(
 
       // copy native library to a managed resource, so that it is always available
       // on the classpath, even when not packaged as a jar
-      Files.createDirectories(resourceManaged)
+      Files.createDirectories(resource.getParent)
       Files.write(resource, Files.readAllBytes(file))
       resource
     }
