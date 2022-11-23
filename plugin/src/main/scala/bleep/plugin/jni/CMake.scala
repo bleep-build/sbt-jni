@@ -2,7 +2,7 @@ package bleep.plugin.jni
 
 import bleep.internal.FileUtils
 import bleep.logging.Logger
-import bleep.{PathOps, cli}
+import bleep.{cli, PathOps}
 
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
@@ -64,6 +64,7 @@ object CMake extends BuildTool {
       logger.withContext(buildScript).info(s"Initialized empty build script for $name")
       Files.writeString(buildScript, template(libName))
     }
+    ()
   }
 
   override def getInstance(baseDir: Path, buildDir: Path, logger: Logger, env: List[(String, String)]): BuildTool.Instance =
@@ -96,33 +97,42 @@ object CMake extends BuildTool {
       if (cmakeVersion >= 312) Seq("--parallel", parallelJobs.toString())
       else Seq.empty
 
-    override def clean(): Unit = cmakeProcess(
-      "--build",
-      buildDir.toString,
-      "--target",
-      "clean"
-    )
-
-    def configure(target: Path): Unit = cmakeProcess(
-      List(
-        // disable producing versioned library files, not needed for fat jars
-        s"-DCMAKE_INSTALL_PREFIX:PATH=$target",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DSBT:BOOLEAN=true",
-        cmakeVersion.toString,
-        baseDir.toString
+    override def clean(): Unit = {
+      cmakeProcess(
+        "--build",
+        buildDir.toString,
+        "--target",
+        "clean"
       )
-    )
+      ()
+    }
 
-    def make(): Unit = cmakeProcess(
-      Seq("--build", buildDir.toString) ++ parallelOptions: _*
-    )
+    def configure(target: Path): Unit = {
+      cmakeProcess(
+        List(
+          // disable producing versioned library files, not needed for fat jars
+          s"-DCMAKE_INSTALL_PREFIX:PATH=$target",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DSBT:BOOLEAN=true",
+          cmakeVersion.toString,
+          baseDir.toString
+        )
+      )
+      ()
+    }
 
-    def install(): Unit =
+    def make(): Unit = {
+      cmakeProcess(List("--build", buildDir.toString) ++ parallelOptions)
+      ()
+    }
+
+    def install(): Unit = {
       // https://cmake.org/cmake/help/v3.15/release/3.15.html#id6
       // Beginning with version 3.15, CMake introduced the install switch
       if (cmakeVersion >= 315) cmakeProcess("--install", buildDir.toString)
       else cli("make install", buildDir, List("make", "install"), cliLogger, env = env)
+      ()
+    }
 
     def library(targetDirectory: Path): Path = {
       configure(targetDirectory)
