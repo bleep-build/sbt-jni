@@ -49,7 +49,7 @@ class JniPackage(
   // Maps locally built, platform-dependant libraries to their locations on the classpath.
   lazy val managedNativeLibraries: Seq[(Path, RelPath)] = {
     val library: Path = jniNative.nativeCompile()
-    val relPath = new RelPath(List("native", jniNative.nativePlatform, jniNative.libName))
+    val relPath = new RelPath(List("native", jniNative.nativePlatform, System.mapLibraryName(jniNative.libName)))
     Seq(library -> relPath)
   }
 
