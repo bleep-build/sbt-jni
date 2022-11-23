@@ -61,7 +61,7 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
       val subdir = if (release) "release" else "debug"
       val products: List[Path] =
         Files
-          .walk(targetDirectory.resolve(subdir))
+          .list(targetDirectory.resolve(subdir))
           .filter(Files.isRegularFile(_))
           .filter { p =>
             val fileName = p.getFileName.toString
