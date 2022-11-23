@@ -21,46 +21,40 @@ class JniPackage(
     Seq(jniNative.nativePlatform -> baseDirectory / "lib_native")
 
   // Reads `unmanagedNativeDirectories` and maps libraries to their locations on the classpath (i.e. their path in a fat jar).
-  val unmanagedNativeLibraries: Seq[(Path, RelPath)] = {
+  lazy val unmanagedNativeLibraries: Seq[(Path, RelPath)] = {
     val mappings: Seq[(Path, RelPath)] =
       unmanagedNativeDirectories.flatMap { dir =>
-        Files
-          .walk(dir)
-          .filter(Files.isRegularFile(_))
-          .iterator()
-          .asScala
-          .map { p =>
-            val relative0 = RelPath.relativeTo(dir, p)
-            val relative1 = relative0.copy(segments = "native" :: relative0.segments)
-            (p, relative1)
-          }
+        regularFilesUnder(dir).map { p =>
+          val relative0 = RelPath.relativeTo(dir, p)
+          val relative1 = relative0.copy(segments = "native" :: relative0.segments)
+          (p, relative1)
+        }
       }
 
     val mappingsPlatform: Seq[(Path, RelPath)] =
       unmanagedPlatformDependentNativeDirectories.flatMap { case (platform, dir) =>
-        Files
-          .walk(dir)
-          .filter(Files.isRegularFile(_))
-          .iterator
-          .asScala
-          .map { p =>
-            val relative0 = RelPath.relativeTo(dir, p)
-            val relative1 = relative0.copy(segments = "native" :: platform :: relative0.segments)
-            (p, relative1)
-          }
+        regularFilesUnder(dir).map { p =>
+          val relative0 = RelPath.relativeTo(dir, p)
+          val relative1 = relative0.copy(segments = "native" :: platform :: relative0.segments)
+          (p, relative1)
+        }
       }
     mappings ++ mappingsPlatform
   }
 
+  private def regularFilesUnder(dir: Path): Iterator[Path] =
+    if (Files.exists(dir)) Files.walk(dir).filter(Files.isRegularFile(_)).iterator().asScala
+    else Iterator.empty
+
   // Maps locally built, platform-dependant libraries to their locations on the classpath.
-  val managedNativeLibraries: Seq[(Path, RelPath)] = {
+  lazy val managedNativeLibraries: Seq[(Path, RelPath)] = {
     val library: Path = jniNative.nativeCompile()
     val relPath = new RelPath(List("native", jniNative.nativePlatform, jniNative.libName))
     Seq(library -> relPath)
   }
 
   // All native libraries, managed and unmanaged.
-  val nativeLibraries: Seq[(Path, RelPath)] =
+  lazy val nativeLibraries: Seq[(Path, RelPath)] =
     distinctBy(unmanagedNativeLibraries ++ managedNativeLibraries)(_._2)
 
   def copyTo(resourceManaged: Path): Seq[Path] =
@@ -70,12 +64,13 @@ class JniPackage(
 
       // copy native library to a managed resource, so that it is always available
       // on the classpath, even when not packaged as a jar
+      Files.createDirectories(resourceManaged)
       Files.write(resource, Files.readAllBytes(file))
       resource
     }
 
   // compat between 2.12 and 2.13
-  def distinctBy[A, B](seq: Seq[A])(f: A => B): Seq[A] = {
+  private def distinctBy[A, B](seq: Seq[A])(f: A => B): Seq[A] = {
     val builder = Seq.newBuilder[A]
     val i = seq.iterator
     var set = Set[B]()
