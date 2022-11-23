@@ -10,8 +10,9 @@ import java.nio.file.{Files, Path}
   */
 class JniNative(
     val logger: Logger,
-    projectPaths: ProjectPaths,
     val nativeCompileSourceDirectory: Path,
+    // this will be appended something like `/native/arm64-darwin`
+    val nativeTargetDirectory: Path,
     // The build tool to be used when building a native library.
     val nativeBuildTool: BuildTool,
     val libName: String,
@@ -57,7 +58,7 @@ class JniNative(
         "unknown-unknown"
     }
 
-  lazy val nativeCompileTarget = projectPaths.targetDir / "native" / nativePlatform
+  lazy val nativeCompileTarget = nativeTargetDirectory / "native" / nativePlatform
 
   // Get an instance of the current native build tool.
   lazy val nativeBuildToolInstance: BuildTool.Instance = {
