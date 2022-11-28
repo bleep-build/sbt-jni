@@ -2,7 +2,7 @@ package bleep.plugin.jni
 
 import bleep.internal.FileUtils
 import bleep.logging.Logger
-import bleep.{PathOps, ProjectPaths, cli}
+import bleep.{cli, PathOps, ProjectPaths}
 
 import java.nio.file.{Files, Path}
 
@@ -38,7 +38,7 @@ class JniNative(
   // the value returned must match that of `com.github.sbt.jni.PlatformMacros#current()` of project `macros`
   lazy val nativePlatform: String =
     try {
-      val lines = cli("check platform", FileUtils.TempDir, List("uname", "-sm"), cli.CliLogger(logger)).stdout
+      val lines = cli("check platform", FileUtils.TempDir, List("uname", "-sm"), logger = logger, out = cli.Out.ViaLogger(logger)).stdout
       if (lines.isEmpty) {
         sys.error("Error occurred trying to run `uname`")
       }

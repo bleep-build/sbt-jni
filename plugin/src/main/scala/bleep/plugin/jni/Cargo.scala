@@ -38,10 +38,10 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
     new Instance(baseDirectory, logger, env)
 
   class Instance(protected val baseDirectory: Path, protected val logger: Logger, env: List[(String, String)]) extends BuildTool.Instance {
-    val cliLogger = cli.CliLogger(logger)
+    val cliOut = cli.Out.ViaLogger(logger)
 
     def clean(): Unit =
-      cli("cargo clean", baseDirectory, List("cargo", "clean"), cliLogger, env = env)
+      cli("cargo clean", baseDirectory, List("cargo", "clean"), logger = logger, out = cliOut, env = env)
 
     def library(targetDirectory: Path): Path = {
       cli(
@@ -54,7 +54,8 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
           Some("--target-dir"),
           Some(targetDirectory.toString)
         ).flatten,
-        cliLogger,
+        logger = logger,
+        out = cliOut,
         env = env
       )
 

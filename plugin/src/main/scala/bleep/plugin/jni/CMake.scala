@@ -72,10 +72,10 @@ object CMake extends BuildTool {
 
   class Instance(baseDir: Path, buildDir: Path, logger: Logger, env: List[(String, String)]) extends BuildTool.Instance {
 
-    private val cliLogger: cli.CliLogger = cli.CliLogger(logger)
+    private val cliOut: cli.Out = cli.Out.ViaLogger(logger)
 
     def cmakeProcess(args: List[String]): cli.WrittenLines =
-      cli("cmake", baseDir, "cmake" :: args, cliLogger, env = env)
+      cli("cmake", baseDir, "cmake" :: args, logger = logger, out = cliOut, env = env)
 
     def cmakeProcess(args: String*): cli.WrittenLines =
       cmakeProcess(args.toList)
@@ -130,7 +130,8 @@ object CMake extends BuildTool {
       // https://cmake.org/cmake/help/v3.15/release/3.15.html#id6
       // Beginning with version 3.15, CMake introduced the install switch
       if (cmakeVersion >= 315) cmakeProcess("--install", buildDir.toString)
-      else cli("make install", buildDir, List("make", "install"), cliLogger, env = env)
+      else
+        cli("make install", buildDir, List("make", "install"), logger = logger, out = cliOut, env = env)
       ()
     }
 
