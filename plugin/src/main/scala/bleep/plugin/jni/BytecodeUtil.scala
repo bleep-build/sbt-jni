@@ -7,7 +7,7 @@ import scala.collection.mutable.HashSet
 
 object BytecodeUtil {
 
-  private class NativeFinder extends ClassVisitor(Opcodes.ASM5) {
+  private class NativeFinder extends ClassVisitor(Opcodes.ASM9) {
 
     // classes found to contain at least one @native def
     val _nativeClasses = new HashSet[String]
