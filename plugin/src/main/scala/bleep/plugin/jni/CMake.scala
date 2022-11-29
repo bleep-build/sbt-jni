@@ -62,6 +62,7 @@ object CMake extends BuildTool {
     if (FileUtils.exists(buildScript)) ()
     else {
       logger.withContext(buildScript).info(s"Initialized empty build script for $name")
+      Files.createDirectories(buildScript.getParent)
       Files.writeString(buildScript, template(libName))
     }
     ()
