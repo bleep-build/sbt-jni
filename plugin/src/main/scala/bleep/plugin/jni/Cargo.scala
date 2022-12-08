@@ -67,7 +67,7 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
           .filter(Files.isRegularFile(_))
           .filter { p =>
             val fileName = p.getFileName.toString
-            fileName.endsWith(".so") || fileName.endsWith(".dylib")
+            fileName.endsWith(".so") || fileName.endsWith(".dylib") || fileName.endsWith(".dll")
           }
           .iterator()
           .asScala

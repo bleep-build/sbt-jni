@@ -2,7 +2,7 @@ package bleep.plugin.jni
 
 import bleep.internal.FileUtils
 import bleep.logging.Logger
-import bleep.{cli, PathOps, ProjectPaths}
+import bleep.{cli, PathOps}
 
 import java.nio.file.{Files, Path}
 
