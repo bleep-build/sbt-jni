@@ -14,11 +14,7 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
   def ensureHasBuildFile(sourceDirectory: Path, logger: Logger, libName: String): Unit = {
     val buildScript = sourceDirectory / "Cargo.toml"
     if (FileUtils.exists(buildScript)) ()
-    else {
-      logger.withContext(buildScript).info(s"Initialized empty build script for $name")
-      Files.createDirectories(buildScript.getParent)
-      Files.writeString(buildScript, template(libName))
-    }
+    else FileUtils.writeString(logger, Some(s"Initialized empty build script for $name"), buildScript, template(libName))
   }
 
   def template(libName: String) =

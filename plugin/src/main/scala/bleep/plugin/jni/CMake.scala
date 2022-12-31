@@ -60,11 +60,7 @@ object CMake extends BuildTool {
   override def ensureHasBuildFile(sourceDirectory: Path, logger: Logger, libName: String) = {
     val buildScript = sourceDirectory / "CMakeLists.txt"
     if (FileUtils.exists(buildScript)) ()
-    else {
-      logger.withContext(buildScript).info(s"Initialized empty build script for $name")
-      Files.createDirectories(buildScript.getParent)
-      Files.writeString(buildScript, template(libName))
-    }
+    else FileUtils.writeString(logger, Some(s"Initialized empty build script for $name"), buildScript, template(libName))
     ()
   }
 
