@@ -5,7 +5,7 @@ import bleep.{fixedClasspath, PathOps, ProjectPaths}
 import bloop.config.Config
 
 import java.nio.file.{Files, Path}
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /** Adds `javah` header-generation functionality to projects.
   */
