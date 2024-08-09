@@ -1,9 +1,8 @@
-package bleep.plugin.jni
-
-import bleep.{PathOps, RelPath}
+package bleep
+package plugin.jni
 
 import java.nio.file.{Files, Path}
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 /** Packages libraries built with JniNative.
   */

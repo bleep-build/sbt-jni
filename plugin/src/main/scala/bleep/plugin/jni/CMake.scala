@@ -1,11 +1,11 @@
-package bleep.plugin.jni
+package bleep
+package plugin.jni
 
 import bleep.internal.FileUtils
 import bleep.logging.Logger
-import bleep.{cli, PathOps}
 
 import java.nio.file.{Files, Path}
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 object CMake extends BuildTool {
 
@@ -94,17 +94,10 @@ object CMake extends BuildTool {
       if (cmakeVersion >= 312) Seq("--parallel", parallelJobs.toString())
       else Seq.empty
 
-    override def clean(): Unit = {
-      cmakeProcess(
-        "--build",
-        buildDir.toString,
-        "--target",
-        "clean"
-      )
-      ()
-    }
+    override def clean(): Unit =
+      cmakeProcess("--build", buildDir.toString, "--target", "clean").discard()
 
-    def configure(target: Path): Unit = {
+    def configure(target: Path): Unit =
       cmakeProcess(
         List(
           // disable producing versioned library files, not needed for fat jars
@@ -114,23 +107,16 @@ object CMake extends BuildTool {
           cmakeVersion.toString,
           baseDir.toString
         )
-      )
-      ()
-    }
+      ).discard()
 
-    def make(): Unit = {
-      cmakeProcess(List("--build", buildDir.toString) ++ parallelOptions)
-      ()
-    }
+    def make(): Unit =
+      cmakeProcess(List("--build", buildDir.toString) ++ parallelOptions).discard()
 
-    def install(): Unit = {
+    def install(): Unit =
       // https://cmake.org/cmake/help/v3.15/release/3.15.html#id6
       // Beginning with version 3.15, CMake introduced the install switch
-      if (cmakeVersion >= 315) cmakeProcess("--install", buildDir.toString)
-      else
-        cli("make install", buildDir, List("make", "install"), logger = logger, out = cliOut, env = env)
-      ()
-    }
+      if (cmakeVersion >= 315) cmakeProcess("--install", buildDir.toString).discard()
+      else cli("make install", buildDir, List("make", "install"), logger = logger, out = cliOut, env = env).discard()
 
     def library(targetDirectory: Path): Path = {
       configure(targetDirectory)

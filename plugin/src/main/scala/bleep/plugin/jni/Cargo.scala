@@ -1,11 +1,11 @@
-package bleep.plugin.jni
+package bleep
+package plugin.jni
 
 import bleep.internal.FileUtils
 import bleep.logging.Logger
-import bleep.{cli, PathOps, RelPath}
 
 import java.nio.file.{Files, Path}
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 class Cargo(protected val release: Boolean = true) extends BuildTool {
 
@@ -37,10 +37,8 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
   class Instance(protected val baseDirectory: Path, protected val logger: Logger, env: List[(String, String)]) extends BuildTool.Instance {
     val cliOut = cli.Out.ViaLogger(logger)
 
-    def clean(): Unit = {
-      cli("cargo clean", baseDirectory, List("cargo", "clean"), logger = logger, out = cliOut, env = env)
-      ()
-    }
+    def clean(): Unit =
+      cli("cargo clean", baseDirectory, List("cargo", "clean"), logger = logger, out = cliOut, env = env).discard()
 
     def library(targetDirectory: Path): Path = {
       cli(
@@ -56,7 +54,7 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
         logger = logger,
         out = cliOut,
         env = env
-      )
+      ).discard()
 
       val subdir = if (release) "release" else "debug"
       val products: List[Path] =
