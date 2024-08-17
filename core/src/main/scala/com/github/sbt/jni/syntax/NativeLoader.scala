@@ -1,5 +1,7 @@
 package com.github.sbt.jni.syntax
 
+import bleep.DiscardOps
+
 import java.nio.file.{Files, Path}
 
 class NativeLoader(nativeLibrary: String) {
@@ -42,7 +44,7 @@ object NativeLoader {
       val extractedPath = tmp.resolve(lib)
 
       try {
-        Files.copy(resourceStream, extractedPath)
+        Files.copy(resourceStream, extractedPath).discard()
       } catch {
         case ex: Exception => throw new UnsatisfiedLinkError("Error while extracting native library: " + ex)
       }
