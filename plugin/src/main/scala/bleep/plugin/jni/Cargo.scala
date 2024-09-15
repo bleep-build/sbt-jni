@@ -81,8 +81,8 @@ class Cargo(protected val release: Boolean = true) extends BuildTool {
         case more @ (picked :: _) =>
           val foundBinaries = more.map(path => RelPath.relativeTo(targetDirectory, path).asString)
           logger
-            .withContext(foundBinaries)
-            .withContext(picked)
+            .withContext("foundBinaries", foundBinaries)
+            .withContext("picked", picked)
             .warn(s"More than one built library was found under $targetDirectory. Only the first one will be used.")
           picked
       }
