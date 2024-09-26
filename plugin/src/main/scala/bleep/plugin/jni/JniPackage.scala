@@ -25,7 +25,7 @@ class JniPackage(
       unmanagedNativeDirectories.flatMap { dir =>
         regularFilesUnder(dir).map { p =>
           val relative0 = RelPath.relativeTo(dir, p)
-          val relative1 = relative0.copy(segments = "native" :: relative0.segments)
+          val relative1 = relative0.prefixed("native")
           (p, relative1)
         }
       }
@@ -34,7 +34,7 @@ class JniPackage(
       unmanagedPlatformDependentNativeDirectories.flatMap { case (platform, dir) =>
         regularFilesUnder(dir).map { p =>
           val relative0 = RelPath.relativeTo(dir, p)
-          val relative1 = relative0.copy(segments = "native" :: platform :: relative0.segments)
+          val relative1 = relative0.prefixed(s"native/$platform")
           (p, relative1)
         }
       }
@@ -48,7 +48,7 @@ class JniPackage(
   // Maps locally built, platform-dependant libraries to their locations on the classpath.
   lazy val managedNativeLibraries: Seq[(Path, RelPath)] = {
     val library: Path = jniNative.nativeCompile()
-    val relPath = new RelPath(List("native", jniNative.nativePlatform, System.mapLibraryName(jniNative.libName)))
+    val relPath = RelPath.of("native", jniNative.nativePlatform, System.mapLibraryName(jniNative.libName))
     Seq(library -> relPath)
   }
 
