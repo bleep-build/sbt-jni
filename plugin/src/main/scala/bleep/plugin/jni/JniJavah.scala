@@ -40,7 +40,7 @@ class JniJavah(logger: Logger, projectPaths: ProjectPaths, bloopProject: Config.
     // fullClasspath can't be used here since it also generates resources. In
     // a project combining JniJavah and JniPackage, we would have a chicken-and-egg
     // problem.
-    fixedClasspath(bloopProject).foreach(task.addClassPath)
+    fixedClasspath(bloopProject, true).foreach(task.addClassPath)
 
     task.addRuntimeSearchPath()
     task.setOutputDir(out)
