@@ -1,7 +1,6 @@
 package bleep
 package plugin.jni
 
-import bloop.config.Config
 import ryddig.Logger
 
 import java.nio.file.{Files, Path}
@@ -9,7 +8,7 @@ import scala.jdk.CollectionConverters.*
 
 /** Adds `javah` header-generation functionality to projects.
   */
-class JniJavah(logger: Logger, projectPaths: ProjectPaths, bloopProject: Config.Project) {
+class JniJavah(logger: Logger, projectPaths: ProjectPaths, resolvedProject: ResolvedProject) {
   lazy val targetDir: Path = projectPaths.targetDir
   val javahTarget = targetDir / "native" / "include"
 
@@ -40,7 +39,7 @@ class JniJavah(logger: Logger, projectPaths: ProjectPaths, bloopProject: Config.
     // fullClasspath can't be used here since it also generates resources. In
     // a project combining JniJavah and JniPackage, we would have a chicken-and-egg
     // problem.
-    fixedClasspath(bloopProject, true).foreach(task.addClassPath)
+    fixedClasspath(resolvedProject).foreach(task.addClassPath)
 
     task.addRuntimeSearchPath()
     task.setOutputDir(out)
