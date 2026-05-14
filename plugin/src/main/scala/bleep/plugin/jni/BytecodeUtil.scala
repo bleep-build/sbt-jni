@@ -15,9 +15,8 @@ object BytecodeUtil {
 
     private var fullyQualifiedName: String = ""
 
-    override def visit(version: Int, access: Int, name: String, signature: String, superName: String, interfaces: Array[String]): Unit = {
+    override def visit(version: Int, access: Int, name: String, signature: String, superName: String, interfaces: Array[String]): Unit =
       fullyQualifiedName = name.replaceAll("/", ".")
-    }
 
     override def visitMethod(access: Int, name: String, desc: String, signature: String, exceptions: Array[String]): MethodVisitor = {
 
@@ -37,20 +36,18 @@ object BytecodeUtil {
     try {
       stream = mkStream
       action(stream)
-    } finally {
+    } finally
       if (stream != null) {
         stream.close()
       }
-    }
   }
 
-  /**
-   * Finds classes containing native implementations.
-   * @param classFile
-   *   java class file from which classes are read
-   * @return
-   *   all fully qualified names of classes that contain at least one member annotated with @native
-   */
+  /** Finds classes containing native implementations.
+    * @param classFile
+    *   java class file from which classes are read
+    * @return
+    *   all fully qualified names of classes that contain at least one member annotated with @native
+    */
   def nativeClasses(classFile: File): Set[String] = using(new FileInputStream(classFile)) { in =>
     val reader = new ClassReader(in)
     val finder = new NativeFinder

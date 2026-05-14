@@ -17,9 +17,9 @@ object NativeLoader {
       val tmp: Path = Files.createTempDirectory("jni-")
       val plat: String = {
         val line =
-          try {
+          try
             scala.io.Source.fromString(scala.sys.process.Process("uname -sm").!!).getLines().next()
-          } catch {
+          catch {
             case _: Exception => sys.error("Error running `uname` command")
           }
         val parts = line.split(" ")
@@ -35,7 +35,7 @@ object NativeLoader {
       val resourcePath: String = "/native/" + plat + "/" + lib
       val resourceStream = Option(this.getClass.getResourceAsStream(resourcePath)) match {
         case Some(s) => s
-        case None =>
+        case None    =>
           throw new UnsatisfiedLinkError(
             "Native library " + lib + " (" + resourcePath + ") cannot be found on the classpath."
           )
@@ -43,18 +43,18 @@ object NativeLoader {
 
       val extractedPath = tmp.resolve(lib)
 
-      try {
+      try
         Files.copy(resourceStream, extractedPath).discard()
-      } catch {
+      catch {
         case ex: Exception => throw new UnsatisfiedLinkError("Error while extracting native library: " + ex)
       }
 
       System.load(extractedPath.toAbsolutePath.toString)
     }
 
-    def load(): Unit = try {
+    def load(): Unit = try
       System.loadLibrary(nativeLibrary)
-    } catch {
+    catch {
       case _: UnsatisfiedLinkError => loadPackaged()
     }
 
